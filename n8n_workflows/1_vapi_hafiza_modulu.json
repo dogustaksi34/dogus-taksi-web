@@ -1,0 +1,169 @@
+{
+  "name": "VAPI - Hafıza Modülü",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vapi-hafiza-sorgula",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [-400, -48],
+      "id": "vapi-webhook-hafiza",
+      "name": "Vapi Webhook",
+      "webhookId": "vapi-hafiza-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Vapi'den gelen veriyi çöz\nlet body = $input.first().json.body || $input.first().json;\nlet message = body.message || body;\nlet call = message.call || body.call || {};\nlet customer = message.customer || call.customer || {};\n\n// toolCallId'yi al - VAPI FORMATI İÇİN GEREKLİ\nlet toolCallId = '';\nif (message?.toolCalls && message.toolCalls.length > 0) {\n  toolCallId = message.toolCalls[0]?.id || '';\n} else if (message?.toolCallList && message.toolCallList.length > 0) {\n  toolCallId = message.toolCallList[0]?.id || '';\n}\n\n// Telefon numarasını al - VAPI'de customer.name içinde geliyor!\nlet telefon = '';\n\n// 1. customer.number (standart)\nif (customer.number) {\n  telefon = customer.number;\n}\n// 2. customer.name (Vapi SIP için numara burada!)\nelse if (customer.name && /^\\d+$/.test(customer.name.replace(/\\D/g, ''))) {\n  telefon = customer.name;\n}\n// 3. call.customer.number\nelse if (call.customer?.number) {\n  telefon = call.customer.number;\n}\n// 4. call.customer.name\nelse if (call.customer?.name && /^\\d+$/.test(call.customer.name.replace(/\\D/g, ''))) {\n  telefon = call.customer.name;\n}\n// 5. Retell formatı\nelse if (call.from_number) {\n  telefon = call.from_number;\n}\n\n// Temizle (son 10 hane)\ntelefon = telefon.toString().replace(/\\D/g, '').slice(-10);\n\nreturn [{ json: { telefon: telefon, toolCallId: toolCallId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-176, -48],
+      "id": "code-telefon-coz",
+      "name": "Telefon Çöz"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "musteriler",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "telefon",
+              "condition": "ilike",
+              "keyValue": "=%{{ $json.telefon }}%"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [48, -48],
+      "id": "supabase-musteri",
+      "name": "Müşteri Kim?",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "Bn1HcqU0Cuto4vIc",
+          "name": "TAKSİ YAPAY ZEKA SİSTEMİ"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "isler",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "musteri_tel",
+              "condition": "ilike",
+              "keyValue": "=%{{ $('Telefon Çöz').item.json.telefon }}%"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [272, -48],
+      "id": "supabase-is",
+      "name": "Son İşi Ne?",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "Bn1HcqU0Cuto4vIc",
+          "name": "TAKSİ YAPAY ZEKA SİSTEMİ"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// toolCallId'yi al\nconst toolCallId = $('Telefon Çöz').first().json.toolCallId || '';\n\n// Verileri önceki düğümlerden çekiyoruz\nlet musteriData = {};\ntry {\n    musteriData = $('Müşteri Kim?').first().json;\n} catch (e) {\n    musteriData = {};\n}\n\nlet sonIsData = {};\ntry {\n    sonIsData = $('Son İşi Ne?').first().json;\n} catch (e) {\n    sonIsData = {};\n}\n\nconst simdi = new Date();\n\n// Varsayılan cevap\nlet response = {\n    isim: musteriData.isim || \"Misafir\",\n    tanidik_mi: !!musteriData.isim,\n    son_gidilen_yer: musteriData.son_konum || \"\",\n    yolculuk_sayisi: musteriData.toplam_yolculuk || 0,\n    aktif_is_var_mi: false,\n    durum_mesaji: \"\"\n};\n\n// --- 1. AKTİF İŞ KONTROLÜ (ACİL DURUM) ---\nif (sonIsData && sonIsData.created_at) {\n    const isZamani = new Date(sonIsData.created_at);\n    const farkDakika = (simdi - isZamani) / 1000 / 60;\n\n    if (farkDakika < 60 && ['YENI', 'TEKLIF', 'VERILDI', 'ARANIYOR'].includes(sonIsData.durum)) {\n        response.aktif_is_var_mi = true;\n        response.durum_mesaji = `Sistemde ${Math.floor(farkDakika)} dakika önce oluşturduğunuz bir talep görünüyor. Durumu: ${sonIsData.durum}. Araç şu an ayarlanıyor.`;\n        response.nereden = sonIsData.nereden;\n        response.nereye = sonIsData.nereye;\n    }\n}\n\n// --- 2. HAFIZA / SOHBET BAŞLATICI ---\nlet hafizaNotu = \"\";\n\nif (response.son_gidilen_yer) {\n    hafizaNotu += `En son sizi ${response.son_gidilen_yer} tarafına götürmüştük. `;\n}\n\nif (response.yolculuk_sayisi > 5) {\n    hafizaNotu += \"Sizi tekrar görmek harika! \";\n}\n\nresponse.durum_mesaji = hafizaNotu;\n\n// VAPI FORMATI - results array ile toolCallId\nreturn {\n  json: {\n    results: [\n      {\n        toolCallId: toolCallId,\n        result: JSON.stringify(response)\n      }\n    ]\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [496, -48],
+      "id": "code-hafiza",
+      "name": "Hafızayı Oluştur"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [720, -48],
+      "id": "response-hafiza",
+      "name": "Yanıt Gönder"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Vapi Webhook": {
+      "main": [
+        [
+          {
+            "node": "Telefon Çöz",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telefon Çöz": {
+      "main": [
+        [
+          {
+            "node": "Müşteri Kim?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Müşteri Kim?": {
+      "main": [
+        [
+          {
+            "node": "Son İşi Ne?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Son İşi Ne?": {
+      "main": [
+        [
+          {
+            "node": "Hafızayı Oluştur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hafızayı Oluştur": {
+      "main": [
+        [
+          {
+            "node": "Yanıt Gönder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

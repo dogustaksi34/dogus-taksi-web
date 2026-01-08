@@ -1,0 +1,196 @@
+{
+  "name": "VAPI - Çağrı Sonu Özeti (WhatsApp)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vapi-cagri-ozeti",
+        "options": {}
+      },
+      "id": "webhook-ozet",
+      "name": "Vapi Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [480, -960],
+      "webhookId": "vapi-ozet-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ========================================================\n// AYARLAR\n// ========================================================\nconst HEDEF_GRUP_ID = \"120363403069550375@g.us\";\nconst API_URL = \"https://evoyeni.beykentkorsantaksi.shop\";\nconst INSTANCE_ADI = \"ERDAL BURKUT\";\nconst API_KEY = \"1F56759F1A2F-4177-8869-41E5990F1209\";\n\n// ========================================================\n// VAPI VERİSİNİ ÇÖZ\n// ========================================================\nlet data = items[0].json;\nif (data.body) data = data.body;\n\n// Vapi event tipini kontrol et\nconst message = data.message || data;\nconst eventType = message.type || data.type || '';\n\n// Sadece end-of-call-report event'ini işle\nif (!['end-of-call-report', 'call.ended', 'call-ended'].includes(eventType)) {\n  return [];\n}\n\n// Call verisini al\nconst call = message.call || data.call || {};\nconst analysis = message.analysis || call.analysis || message.callAnalysis || {};\nconst artifact = message.artifact || {};\n\n// ========================================================\n// VERİLERİ HAZIRLA\n// ========================================================\nconst guvenliInstanceAdi = encodeURIComponent(INSTANCE_ADI);\n\n// Müşteri numarası - Vapi SIP aramalarda customer.name içinde geliyor\nlet musteriNo = 'Numara Gizli';\nif (call.customer?.name && /\\d{10,}/.test(String(call.customer.name).replace(/\\D/g, ''))) {\n  musteriNo = call.customer.name;\n} else if (call.customer?.number) {\n  musteriNo = call.customer.number;\n} else if (call.from_number) {\n  musteriNo = call.from_number;\n} else if (call.phoneNumber) {\n  musteriNo = call.phoneNumber;\n}\n\n// Aranan hat\nconst arananHat = call.to_number || call.toNumber || \"+908503468309\";\n\n// Tarih\nconst tarih = call.startedAt || call.createdAt || new Date().toISOString();\nconst tarihFormatli = new Date(tarih).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' });\n\n// Süre\nconst sureSaniye = call.duration || message.durationSeconds || 0;\nconst sureDakika = Math.floor(sureSaniye / 60);\nconst sureKalan = sureSaniye % 60;\nconst sureFormatli = `${sureDakika}:${sureKalan.toString().padStart(2, '0')}`;\n\n// Ses kaydı URL\nconst sesKaydi = call.recordingUrl || message.recordingUrl || artifact.recordingUrl || \"\";\n\n// Özet\nlet ozet = \"Özet Yok\";\nif (analysis.summary) {\n  ozet = analysis.summary;\n} else if (analysis.structuredData?.summary) {\n  ozet = analysis.structuredData.summary;\n} else if (message.summary) {\n  ozet = message.summary;\n}\n\n// Duygu analizi\nconst duygu = analysis.sentiment || analysis.userSentiment || \"Nötr\";\n\n// Sonuç durumu\nconst sonuc = analysis.successEvaluation || call.endedReason || \"Bilinmiyor\";\n\n// Transcript (konuşma metni)\nlet transcript = \"\";\nif (artifact.messages && artifact.messages.length > 0) {\n  transcript = artifact.messages\n    .filter(m => m.role === 'user' || m.role === 'bot' || m.role === 'assistant')\n    .slice(-5)\n    .map(m => `${m.role === 'user' ? '👤' : '🤖'} ${m.message || m.content || ''}`)\n    .join('\\n');\n}\n\n// ========================================================\n// WHATSAPP MESAJI OLUŞTUR\n// ========================================================\nlet mesaj = `🚖 *YENİ ÇAĞRI RAPORU*\\n\\n📞 *Müşteri:* ${musteriNo}\\n📲 *Hat:* ${arananHat}\\n📅 *Tarih:* ${tarihFormatli}\\n⏱️ *Süre:* ${sureFormatli}\\n📊 *Duygu:* ${duygu}\\n✅ *Sonuç:* ${sonuc}\\n\\n📝 *Özet:*\\n${ozet}`;\n\nif (transcript) {\n  mesaj += `\\n\\n💬 *Son Konuşmalar:*\\n${transcript}`;\n}\n\nreturn {\n  json: {\n    target_jid: HEDEF_GRUP_ID,\n    message_text: mesaj,\n    audio_url: sesKaydi,\n    apiUrlText: `${API_URL}/message/sendText/${guvenliInstanceAdi}`,\n    apiUrlMedia: `${API_URL}/message/sendMedia/${guvenliInstanceAdi}`,\n    apiKey: API_KEY,\n    has_audio: sesKaydi.length > 0\n  }\n};"
+      },
+      "id": "code-ayarla",
+      "name": "Veriyi Hazırla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, -960]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.apiUrlText }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $json.target_jid }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.message_text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-whatsapp-text",
+      "name": "WhatsApp Özeti Gönder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1024, -960]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $('Veriyi Hazırla').item.json.has_audio }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-ses-var",
+      "name": "Ses Kaydı Var mı?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1248, -960]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "wait-bekle",
+      "name": "Kısa Bekle",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1456, -1056],
+      "webhookId": "wait_vapi_1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Veriyi Hazırla').item.json.apiUrlMedia }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Veriyi Hazırla').item.json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $('Veriyi Hazırla').item.json.target_jid }}"
+            },
+            {
+              "name": "mediatype",
+              "value": "audio"
+            },
+            {
+              "name": "media",
+              "value": "={{ $('Veriyi Hazırla').item.json.audio_url }}"
+            },
+            {
+              "name": "fileName",
+              "value": "gorusme-kaydi.mp3"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-whatsapp-audio",
+      "name": "WhatsApp Ses Gönder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1664, -1056]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Vapi Webhook": {
+      "main": [
+        [
+          {
+            "node": "Veriyi Hazırla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veriyi Hazırla": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Özeti Gönder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Özeti Gönder": {
+      "main": [
+        [
+          {
+            "node": "Ses Kaydı Var mı?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ses Kaydı Var mı?": {
+      "main": [
+        [
+          {
+            "node": "Kısa Bekle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Kısa Bekle": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Ses Gönder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

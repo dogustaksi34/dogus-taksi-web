@@ -1,0 +1,160 @@
+{
+  "functions": [
+    {
+      "name": "musteri_hafiza_sorgula",
+      "description": "Çağrı başladığında müşterinin telefon numarasına göre veritabanından geçmiş bilgilerini sorgular. Eski müşteri mi yeni müşteri mi belirler.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "telefon_numarasi": {
+            "type": "string",
+            "description": "Müşterinin telefon numarası (arayan numara)"
+          }
+        },
+        "required": [
+          "telefon_numarasi"
+        ]
+      },
+      "serverUrl": "https://n8nyeni.beykentkorsantaksi.shop/api/musteri-hafiza"
+    },
+    {
+      "name": "musteri_bilgi_kaydet",
+      "description": "Yeni müşteri bilgilerini veya mevcut müşterinin güncel bilgilerini veritabanına kaydeder.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "telefon_numarasi": {
+            "type": "string",
+            "description": "Müşterinin telefon numarası"
+          },
+          "isim": {
+            "type": "string",
+            "description": "Müşterinin adı"
+          },
+          "cinsiyet": {
+            "type": "string",
+            "enum": [
+              "erkek",
+              "kadin"
+            ],
+            "description": "Müşterinin cinsiyeti (Bey/Hanım için)"
+          },
+          "son_konum": {
+            "type": "string",
+            "description": "Müşterinin son gittiği konum"
+          },
+          "son_fiyat": {
+            "type": "number",
+            "description": "Son verilen fiyat (TL)"
+          }
+        },
+        "required": [
+          "telefon_numarasi",
+          "isim"
+        ]
+      },
+      "serverUrl": "https://n8nyeni.beykentkorsantaksi.shop/api/musteri-kaydet"
+    },
+    {
+      "name": "calculate_dynamic_fare",
+      "description": "Çıkış ve varış noktalarına göre dinamik fiyat hesaplar. Google Maps API kullanarak mesafe ve süre bazlı fiyatlandırma yapar.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cikis_noktasi": {
+            "type": "string",
+            "description": "Müşterinin alınacağı konum (ilçe dahil tam adres)"
+          },
+          "varis_noktasi": {
+            "type": "string",
+            "description": "Müşterinin gideceği konum (ilçe dahil tam adres)"
+          },
+          "yolcu_sayisi": {
+            "type": "integer",
+            "description": "Yolcu sayısı"
+          },
+          "bagaj_sayisi": {
+            "type": "integer",
+            "description": "Büyük bagaj/valiz sayısı"
+          }
+        },
+        "required": [
+          "cikis_noktasi",
+          "varis_noktasi"
+        ]
+      },
+      "serverUrl": "https://n8nyeni.beykentkorsantaksi.shop/api/fiyat-hesapla"
+    },
+    {
+      "name": "notify_admin",
+      "description": "Özel durumlar için yöneticiye/yetkiliye bildirim gönderir. SMS, WhatsApp veya dashboard bildirimi olarak iletilir.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "telefon_numarasi": {
+            "type": "string",
+            "description": "Müşterinin telefon numarası"
+          },
+          "musteri_ismi": {
+            "type": "string",
+            "description": "Müşterinin adı"
+          },
+          "talep_tipi": {
+            "type": "string",
+            "enum": [
+              "buyuk_arac",
+              "iptal_talebi",
+              "taksi_nerede",
+              "gidis_donus",
+              "evcil_hayvan",
+              "vip_talep",
+              "sistem_hatasi",
+              "diger"
+            ],
+            "description": "Talep/sorun türü"
+          },
+          "detay": {
+            "type": "string",
+            "description": "Ek detaylar ve notlar"
+          },
+          "cikis_noktasi": {
+            "type": "string",
+            "description": "Varsa çıkış noktası"
+          },
+          "varis_noktasi": {
+            "type": "string",
+            "description": "Varsa varış noktası"
+          }
+        },
+        "required": [
+          "telefon_numarasi",
+          "talep_tipi",
+          "detay"
+        ]
+      },
+      "serverUrl": "https://n8nyeni.beykentkorsantaksi.shop/api/admin-bildir"
+    },
+    {
+      "name": "end_call",
+      "description": "Görüşmeyi nazik bir şekilde sonlandırır.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "sebep": {
+            "type": "string",
+            "enum": [
+              "basarili_rezervasyon",
+              "yetkili_aktarim",
+              "musteri_iptal",
+              "diger"
+            ],
+            "description": "Görüşme sonlandırma sebebi"
+          }
+        },
+        "required": [
+          "sebep"
+        ]
+      }
+    }
+  ]
+}

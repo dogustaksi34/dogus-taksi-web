@@ -1,0 +1,228 @@
+{
+  "name": "Vapi - Müşteri Bilgi Kaydet (Supabase)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "musteri-kaydet",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-kaydet",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Vapi'den gelen veriyi al\nconst body = $input.first().json.body;\nconst message = body?.message;\nconst params = message?.functionCall?.parameters || {};\nconst call = message?.call;\n\n// Telefon numarasını temizle\nlet telefon = params.telefon_numarasi || call?.customer?.number || '';\ntelefon = telefon.replace(/\\D/g, '').slice(-10);\n\n// Kayıt verisi\nconst kayit = {\n  telefon: telefon,\n  isim: params.isim || 'Bilinmiyor',\n  cinsiyet: params.cinsiyet || 'erkek',\n  son_konum: params.son_konum || null,\n  son_fiyat: params.son_fiyat || null,\n  son_guncelleme: new Date().toISOString()\n};\n\nreturn [{ json: kayit }];"
+      },
+      "id": "code-veri-hazirla",
+      "name": "Veri Hazırla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "musteriler",
+        "returnAll": false,
+        "limit": 1,
+        "filterType": "string",
+        "filterString": "=telefon=eq.{{ $json.telefon }}"
+      },
+      "id": "supabase-kontrol",
+      "name": "Mevcut Müşteri Kontrol",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.id }}",
+              "value2": ""
+            }
+          ]
+        }
+      },
+      "id": "if-musteri-var",
+      "name": "Müşteri Var mı?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "musteriler",
+        "matchingConditions": {
+          "values": [
+            {
+              "column": "telefon",
+              "value": "={{ $('Veri Hazırla').item.json.telefon }}"
+            }
+          ]
+        },
+        "fieldsToUpdateUI": {
+          "values": [
+            {
+              "fieldName": "isim",
+              "fieldValue": "={{ $('Veri Hazırla').item.json.isim }}"
+            },
+            {
+              "fieldName": "cinsiyet",
+              "fieldValue": "={{ $('Veri Hazırla').item.json.cinsiyet }}"
+            },
+            {
+              "fieldName": "son_konum",
+              "fieldValue": "={{ $('Veri Hazırla').item.json.son_konum }}"
+            },
+            {
+              "fieldName": "son_fiyat",
+              "fieldValue": "={{ $('Veri Hazırla').item.json.son_fiyat }}"
+            },
+            {
+              "fieldName": "son_guncelleme",
+              "fieldValue": "={{ $('Veri Hazırla').item.json.son_guncelleme }}"
+            },
+            {
+              "fieldName": "toplam_yolculuk",
+              "fieldValue": "={{ $json.toplam_yolculuk + 1 }}"
+            }
+          ]
+        }
+      },
+      "id": "supabase-update",
+      "name": "Supabase Güncelle",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1050, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "musteriler",
+        "fieldsToInsertUI": {
+          "values": [
+            {
+              "fieldName": "telefon",
+              "fieldValue": "={{ $('Veri Hazırla').item.json.telefon }}"
+            },
+            {
+              "fieldName": "isim",
+              "fieldValue": "={{ $('Veri Hazırla').item.json.isim }}"
+            },
+            {
+              "fieldName": "cinsiyet",
+              "fieldValue": "={{ $('Veri Hazırla').item.json.cinsiyet }}"
+            },
+            {
+              "fieldName": "son_konum",
+              "fieldValue": "={{ $('Veri Hazırla').item.json.son_konum }}"
+            },
+            {
+              "fieldName": "son_fiyat",
+              "fieldValue": "={{ $('Veri Hazırla').item.json.son_fiyat }}"
+            },
+            {
+              "fieldName": "son_guncelleme",
+              "fieldValue": "={{ $('Veri Hazırla').item.json.son_guncelleme }}"
+            },
+            {
+              "fieldName": "toplam_yolculuk",
+              "fieldValue": "=1"
+            }
+          ]
+        }
+      },
+      "id": "supabase-insert",
+      "name": "Supabase Yeni Ekle",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const veri = $('Veri Hazırla').item.json;\nconst hitap = veri.cinsiyet === 'kadin' ? 'Hanım' : 'Bey';\n\nreturn [{ \n  json: { \n    result: `Müşteri bilgileri kaydedildi: ${veri.isim} ${hitap}` \n  } \n}];"
+      },
+      "id": "code-yanit",
+      "name": "Yanıt Hazırla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "response-kaydet",
+      "name": "Yanıt Gönder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Veri Hazırla", "type": "main", "index": 0 }]
+      ]
+    },
+    "Veri Hazırla": {
+      "main": [
+        [{ "node": "Mevcut Müşteri Kontrol", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mevcut Müşteri Kontrol": {
+      "main": [
+        [{ "node": "Müşteri Var mı?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Müşteri Var mı?": {
+      "main": [
+        [{ "node": "Supabase Güncelle", "type": "main", "index": 0 }],
+        [{ "node": "Supabase Yeni Ekle", "type": "main", "index": 0 }]
+      ]
+    },
+    "Supabase Güncelle": {
+      "main": [
+        [{ "node": "Yanıt Hazırla", "type": "main", "index": 0 }]
+      ]
+    },
+    "Supabase Yeni Ekle": {
+      "main": [
+        [{ "node": "Yanıt Hazırla", "type": "main", "index": 0 }]
+      ]
+    },
+    "Yanıt Hazırla": {
+      "main": [
+        [{ "node": "Yanıt Gönder", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

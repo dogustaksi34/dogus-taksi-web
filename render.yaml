@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: dogus-taksi
+    env: node
+    region: frankfurt
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    branch: main
+    envVars:
+      - key: MONGODB_URI
+        sync: false

@@ -1,0 +1,136 @@
+{
+  "name": "VAPI - WhatsApp Bildirim (Evolution API)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vapi-admin-bildir",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "vapi-webhook-bildir",
+      "name": "Vapi Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [480, -960],
+      "webhookId": "vapi-bildir-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ========================================================\n// AYARLAR\n// ========================================================\nconst HEDEF_GRUP_ID = \"120363403069550375@g.us\";\nconst API_URL = \"https://evoyeni.beykentkorsantaksi.shop\";\nconst INSTANCE_ADI = \"ERDAL BURKUT\";\nconst API_KEY = \"1F56759F1A2F-4177-8869-41E5990F1209\";\n\n// ========================================================\n// VAPI VERİSİNİ ÇÖZ\n// ========================================================\nlet data = items[0].json;\nif (data.body) data = data.body;\n\nconst message = data.message || data;\nconst call = message.call || data.call || {};\nconst customer = message.customer || call.customer || {};\n\n// toolCallId'yi al\nlet toolCallId = '';\nif (message?.toolCalls && message.toolCalls.length > 0) {\n  toolCallId = message.toolCalls[0]?.id || '';\n} else if (message?.toolCallList && message.toolCallList.length > 0) {\n  toolCallId = message.toolCallList[0]?.id || '';\n}\n\n// Parametreleri al\nlet params = {};\nif (message?.toolCalls && message.toolCalls.length > 0) {\n  params = message.toolCalls[0]?.function?.arguments || {};\n} else if (message?.toolCallList && message.toolCallList.length > 0) {\n  params = message.toolCallList[0]?.function?.arguments || {};\n} else if (message?.functionCall?.parameters) {\n  params = message.functionCall.parameters;\n} else if (data?.args) {\n  params = data.args;\n}\n\nif (typeof params === 'string') {\n  try { params = JSON.parse(params); } catch (e) { params = {}; }\n}\n\n// Talep tipi etiketleri\nconst talepTipleri = {\n  'buyuk_arac': '🚐 Büyük Araç Talebi',\n  'iptal_talebi': '❌ İptal Talebi',\n  'taksi_nerede': '📍 Taksi Nerede?',\n  'gidis_donus': '🔄 Gidiş-Dönüş',\n  'evcil_hayvan': '🐾 Evcil Hayvan',\n  'vip_talep': '⭐ VIP Talep',\n  'sistem_hatasi': '⚠️ Sistem Hatası',\n  'diger': '📋 Diğer'\n};\n\n// Verileri çıkar\nconst guvenliInstanceAdi = encodeURIComponent(INSTANCE_ADI);\n\n// Müşteri numarası - Vapi SIP aramalarda customer.name içinde geliyor\nlet musteriNo = 'Numara Gizli';\nif (customer.name && /\\d{10,}/.test(String(customer.name).replace(/\\D/g, ''))) {\n  musteriNo = customer.name;\n} else if (customer.number) {\n  musteriNo = customer.number;\n} else if (call.from_number) {\n  musteriNo = call.from_number;\n} else if (params.telefon_numarasi) {\n  musteriNo = params.telefon_numarasi;\n}\n\nconst musteriIsmi = params.musteri_ismi || \"Bilinmiyor\";\nconst talepTipi = talepTipleri[params.talep_tipi] || params.talep_tipi || \"Genel\";\nconst detay = params.detay || \"Detay yok\";\nconst cikis = params.cikis_noktasi || \"\";\nconst varis = params.varis_noktasi || \"\";\n\nconst tarih = new Date().toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' });\n\n// Mesaj Metni\nlet mesaj = `🚨 *DOĞUŞ TAKSİ - YENİ BİLDİRİM*\\n\\n${talepTipi}\\n\\n📞 *Müşteri:* ${musteriIsmi}\\n📱 *Telefon:* ${musteriNo}\\n📅 *Tarih:* ${tarih}`;\n\nif (cikis) mesaj += `\\n📍 *Çıkış:* ${cikis}`;\nif (varis) mesaj += `\\n🎯 *Varış:* ${varis}`;\n\nmesaj += `\\n\\n📝 *Detay:* ${detay}`;\n\nreturn {\n  json: {\n    target_jid: HEDEF_GRUP_ID,\n    message_text: mesaj,\n    apiUrlText: `${API_URL}/message/sendText/${guvenliInstanceAdi}`,\n    apiKey: API_KEY,\n    toolCallId: toolCallId\n  }\n};"
+      },
+      "id": "code-ayarla",
+      "name": "Ayarları Yapılandır",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, -960]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.apiUrlText }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $json.target_jid }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.message_text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-whatsapp",
+      "name": "WhatsApp Mesaj Gönder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1024, -960]
+    },
+    {
+      "parameters": {
+        "jsCode": "const toolCallId = $('Ayarları Yapılandır').item.json.toolCallId || '';\n\n// VAPI FORMATI - results array ile toolCallId\nreturn {\n  json: {\n    results: [\n      {\n        toolCallId: toolCallId,\n        result: \"Yetkili arkadaşımıza bildirim gönderildi, 2 dakika içinde sizi arayacaklar.\"\n      }\n    ]\n  }\n};"
+      },
+      "id": "code-yanit",
+      "name": "Yanıt Hazırla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1248, -960]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "response-bildir",
+      "name": "Yanıt Gönder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1456, -960]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Vapi Webhook": {
+      "main": [
+        [
+          {
+            "node": "Ayarları Yapılandır",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ayarları Yapılandır": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Mesaj Gönder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Mesaj Gönder": {
+      "main": [
+        [
+          {
+            "node": "Yanıt Hazırla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yanıt Hazırla": {
+      "main": [
+        [
+          {
+            "node": "Yanıt Gönder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

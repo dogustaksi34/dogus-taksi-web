@@ -1,0 +1,257 @@
+{
+  "name": "VAPI - Müşteri Bilgisi Kaydetme",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vapi-musteri-kaydet",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [-1712, 80],
+      "id": "vapi-webhook-kaydet",
+      "name": "Vapi Kayıt Webhook",
+      "webhookId": "vapi-kaydet-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Vapi'den gelen veriyi çöz\nlet body = $input.first().json.body || $input.first().json;\nlet message = body.message || body;\nlet call = message.call || body.call || {};\nlet customer = message.customer || call.customer || {};\n\n// toolCallId'yi al - VAPI FORMATI İÇİN GEREKLİ\nlet toolCallId = '';\nif (message?.toolCalls && message.toolCalls.length > 0) {\n  toolCallId = message.toolCalls[0]?.id || '';\n} else if (message?.toolCallList && message.toolCallList.length > 0) {\n  toolCallId = message.toolCallList[0]?.id || '';\n}\n\n// VAPI formatı: toolCalls array içinde geliyor\nlet params = {};\n\n// Yöntem 1: toolCalls array (Vapi asıl formatı)\nif (message?.toolCalls && message.toolCalls.length > 0) {\n  params = message.toolCalls[0]?.function?.arguments || {};\n}\n// Yöntem 2: toolCallList (alternatif)\nelse if (message?.toolCallList && message.toolCallList.length > 0) {\n  params = message.toolCallList[0]?.function?.arguments || {};\n}\n// Yöntem 3: toolWithToolCallList (başka alternatif)\nelse if (message?.toolWithToolCallList && message.toolWithToolCallList.length > 0) {\n  params = message.toolWithToolCallList[0]?.toolCall?.function?.arguments || {};\n}\n// Yöntem 4: Eski format (functionCall)\nelse if (message?.functionCall?.parameters) {\n  params = message.functionCall.parameters;\n}\n// Yöntem 5: Retell formatı (geriye uyumluluk)\nelse if (body?.args) {\n  params = body.args;\n}\n\n// String ise parse et\nif (typeof params === 'string') {\n  try {\n    params = JSON.parse(params);\n  } catch (e) {\n    params = {};\n  }\n}\n\n// Telefon numarasını al\nlet telefon = '';\nif (customer.number) {\n  telefon = customer.number;\n} else if (customer.name && /^\\d+$/.test(customer.name.replace(/\\D/g, ''))) {\n  telefon = customer.name;\n} else if (call.customer?.number) {\n  telefon = call.customer.number;\n} else if (call.customer?.name && /^\\d+$/.test(call.customer.name.replace(/\\D/g, ''))) {\n  telefon = call.customer.name;\n} else if (call.from_number) {\n  telefon = call.from_number;\n} else if (params.telefon_numarasi) {\n  telefon = params.telefon_numarasi;\n}\n\n// Temizle (son 10 hane)\ntelefon = telefon.toString().replace(/\\D/g, '').slice(-10);\n\nreturn [{ \n  json: { \n    telefon: telefon,\n    isim: params.isim || '',\n    son_konum: params.son_konum || '',\n    son_fiyat: params.son_fiyat || null,\n    cinsiyet: params.cinsiyet || 'erkek',\n    toolCallId: toolCallId\n  } \n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1488, 80],
+      "id": "code-veri-coz",
+      "name": "Veri Çöz"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "musteriler",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "telefon",
+              "condition": "ilike",
+              "keyValue": "=%{{ $json.telefon }}%"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [-1264, 80],
+      "id": "supabase-kontrol",
+      "name": "Müşteri Var mı?",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "Bn1HcqU0Cuto4vIc",
+          "name": "TAKSİ YAPAY ZEKA SİSTEMİ"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.telefon }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [-1040, 80],
+      "id": "if-kayitli",
+      "name": "Kayıtlı mı?"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "musteriler",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "telefon",
+              "fieldValue": "={{ $('Veri Çöz').item.json.telefon }}"
+            },
+            {
+              "fieldId": "isim",
+              "fieldValue": "={{ $('Veri Çöz').item.json.isim }}"
+            },
+            {
+              "fieldId": "son_konum",
+              "fieldValue": "={{ $('Veri Çöz').item.json.son_konum }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [-816, -16],
+      "id": "supabase-guncelle",
+      "name": "Güncelle (Update)",
+      "credentials": {
+        "supabaseApi": {
+          "id": "Bn1HcqU0Cuto4vIc",
+          "name": "TAKSİ YAPAY ZEKA SİSTEMİ"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "tableId": "musteriler",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "telefon",
+              "fieldValue": "={{ $('Veri Çöz').item.json.telefon }}"
+            },
+            {
+              "fieldId": "isim",
+              "fieldValue": "={{ $('Veri Çöz').item.json.isim }}"
+            },
+            {
+              "fieldId": "son_konum",
+              "fieldValue": "={{ $('Veri Çöz').item.json.son_konum }}"
+            },
+            {
+              "fieldId": "toplam_yolculuk",
+              "fieldValue": "=1"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [-816, 176],
+      "id": "supabase-olustur",
+      "name": "Oluştur (Create)",
+      "credentials": {
+        "supabaseApi": {
+          "id": "Bn1HcqU0Cuto4vIc",
+          "name": "TAKSİ YAPAY ZEKA SİSTEMİ"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const veri = $('Veri Çöz').item.json;\nconst toolCallId = veri.toolCallId || '';\nconst hitap = veri.cinsiyet === 'kadin' ? 'Hanım' : 'Bey';\n\n// VAPI FORMATI - results array ile toolCallId\nreturn { \n  json: { \n    results: [\n      {\n        toolCallId: toolCallId,\n        result: `Müşteri bilgileri kaydedildi: ${veri.isim} ${hitap}`\n      }\n    ]\n  } \n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-592, 80],
+      "id": "code-basarili",
+      "name": "Başarılı"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [-368, 80],
+      "id": "response-kaydet",
+      "name": "Yanıt Gönder"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Vapi Kayıt Webhook": {
+      "main": [
+        [
+          {
+            "node": "Veri Çöz",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veri Çöz": {
+      "main": [
+        [
+          {
+            "node": "Müşteri Var mı?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Müşteri Var mı?": {
+      "main": [
+        [
+          {
+            "node": "Kayıtlı mı?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kayıtlı mı?": {
+      "main": [
+        [
+          {
+            "node": "Güncelle (Update)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Oluştur (Create)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Güncelle (Update)": {
+      "main": [
+        [
+          {
+            "node": "Başarılı",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Oluştur (Create)": {
+      "main": [
+        [
+          {
+            "node": "Başarılı",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Başarılı": {
+      "main": [
+        [
+          {
+            "node": "Yanıt Gönder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

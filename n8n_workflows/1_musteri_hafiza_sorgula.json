@@ -1,0 +1,131 @@
+{
+  "name": "Vapi - Müşteri Hafıza Sorgula (Supabase)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "musteri-hafiza",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-hafiza",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Vapi'den gelen veriyi al\nconst body = $input.first().json.body;\nconst call = body?.message?.call;\n\n// Telefon numarasını temizle (son 10 hane)\nlet telefon = call?.customer?.number || '';\ntelefon = telefon.replace(/\\D/g, '').slice(-10);\n\nreturn [{ json: { telefon } }];"
+      },
+      "id": "code-telefon",
+      "name": "Telefon Temizle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "musteriler",
+        "returnAll": false,
+        "limit": 1,
+        "filterType": "string",
+        "filterString": "=telefon=ilike.*{{ $json.telefon }}*"
+      },
+      "id": "supabase-find",
+      "name": "Supabase Sorgula",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.id }}",
+              "value2": ""
+            }
+          ]
+        }
+      },
+      "id": "if-musteri-var",
+      "name": "Müşteri Var mı?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const musteri = $input.first().json;\nconst hitap = musteri.cinsiyet === 'kadin' ? 'Hanım' : 'Bey';\n\nconst sonuc = {\n  tanidik_mi: true,\n  isim: musteri.isim,\n  hitap: hitap,\n  cinsiyet: musteri.cinsiyet,\n  son_konum: musteri.son_konum || null,\n  son_fiyat: musteri.son_fiyat || null,\n  durum_mesaji: musteri.son_konum ? `En son ${musteri.son_konum}'a gitmiştiniz.` : null,\n  toplam_yolculuk: musteri.toplam_yolculuk || 1\n};\n\nreturn [{ json: { result: JSON.stringify(sonuc) } }];"
+      },
+      "id": "code-eski-musteri",
+      "name": "Eski Müşteri Yanıtı",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sonuc = {\n  tanidik_mi: false,\n  isim: null,\n  mesaj: \"Yeni müşteri, isim sorulmalı\"\n};\n\nreturn [{ json: { result: JSON.stringify(sonuc) } }];"
+      },
+      "id": "code-yeni-musteri",
+      "name": "Yeni Müşteri Yanıtı",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "response-hafiza",
+      "name": "Yanıt Gönder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Telefon Temizle", "type": "main", "index": 0 }]
+      ]
+    },
+    "Telefon Temizle": {
+      "main": [
+        [{ "node": "Supabase Sorgula", "type": "main", "index": 0 }]
+      ]
+    },
+    "Supabase Sorgula": {
+      "main": [
+        [{ "node": "Müşteri Var mı?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Müşteri Var mı?": {
+      "main": [
+        [{ "node": "Eski Müşteri Yanıtı", "type": "main", "index": 0 }],
+        [{ "node": "Yeni Müşteri Yanıtı", "type": "main", "index": 0 }]
+      ]
+    },
+    "Eski Müşteri Yanıtı": {
+      "main": [
+        [{ "node": "Yanıt Gönder", "type": "main", "index": 0 }]
+      ]
+    },
+    "Yeni Müşteri Yanıtı": {
+      "main": [
+        [{ "node": "Yanıt Gönder", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

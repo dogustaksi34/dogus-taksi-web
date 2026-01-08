@@ -1,0 +1,208 @@
+{
+  "name": "VAPI - Fiyat Hesaplama",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vapi-fiyat-hesapla",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "id": "webhook-fiyat",
+      "name": "Vapi Webhook",
+      "webhookId": "vapi-fiyat-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- AYARLAR ---\nconst API_KEY = \"AIzaSyDg-U9ttv3r12ra20tUREZ9GAqUGSyWzE4\";\n\n// --- VAPI'DEN GİRDİLERİ AL ---\nconst body = $input.first().json.body || $input.first().json;\nconst message = body?.message || body;\n\n// toolCallId'yi al - VAPI FORMATI İÇİN GEREKLİ\nlet toolCallId = '';\nif (message?.toolCalls && message.toolCalls.length > 0) {\n  toolCallId = message.toolCalls[0]?.id || '';\n} else if (message?.toolCallList && message.toolCallList.length > 0) {\n  toolCallId = message.toolCallList[0]?.id || '';\n}\n\n// VAPI formatı: toolCalls array içinde geliyor\nlet params = {};\n\nif (message?.toolCalls && message.toolCalls.length > 0) {\n  params = message.toolCalls[0]?.function?.arguments || {};\n} else if (message?.toolCallList && message.toolCallList.length > 0) {\n  params = message.toolCallList[0]?.function?.arguments || {};\n} else if (message?.toolWithToolCallList && message.toolWithToolCallList.length > 0) {\n  params = message.toolWithToolCallList[0]?.toolCall?.function?.arguments || {};\n} else if (message?.functionCall?.parameters) {\n  params = message.functionCall.parameters;\n} else if (body?.args) {\n  params = body.args;\n}\n\nif (typeof params === 'string') {\n  try { params = JSON.parse(params); } catch (e) { params = {}; }\n}\n\nlet pickup = params.cikis_noktasi || \"\";\nlet dropoff = params.varis_noktasi || \"\";\nlet yolcu_sayisi = params.yolcu_sayisi || 1;\nlet bagaj_sayisi = params.bagaj_sayisi || 0;\n\n// --- KAPASİTE KONTROLÜ ---\nif (yolcu_sayisi > 4 || bagaj_sayisi > 2) {\n  return [{\n    json: {\n      buyuk_arac: true,\n      toolCallId: toolCallId,\n      result: \"Efendim standart binek aracımız bu kapasite için küçük kalabilir. Size uygun araç ayarlanması için durumu yetkili arkadaşıma iletiyorum, 2 dakika içinde size dönüş yapacaklar.\"\n    }\n  }];\n}\n\n// --- İSTANBUL İLÇE SÖZLÜĞÜ ---\nconst knownDistricts = [\n  \"ARNAVUTKOY\", \"ATASEHIR\", \"AVCILAR\", \"BAGCILAR\", \"BAHCELIEVLER\", \"BAKIRKOY\",\n  \"BASAKSEHIR\", \"BAYRAMPASA\", \"BESIKTAS\", \"BEYKOZ\", \"BEYLIKDUZU\", \"BEYOGLU\",\n  \"BUYUKCEKMECE\", \"CATALCA\", \"CEKMEKOY\", \"ESENLER\", \"ESENYURT\", \"EYUPSULTAN\",\n  \"FATIH\", \"GAZIOSMANPASA\", \"GUNGOREN\", \"KADIKOY\", \"KAGITHANE\", \"KARTAL\",\n  \"KUCUKCEKMECE\", \"MALTEPE\", \"PENDIK\", \"SANCAKTEPE\", \"SARIYER\", \"SILIVRI\",\n  \"SULTANBEYLI\", \"SULTANGAZI\", \"SILE\", \"SISLI\", \"TUZLA\", \"UMRANIYE\", \"USKUDAR\",\n  \"ZEYTINBURNU\", \"KUMBURGAZ\", \"BEYKENT\", \"HALKALI\", \"IKITELLI\", \"TAKSIM\", \"LEVENT\"\n];\n\nconst landmarks = {\n  \"MARMARA PARK\": \"BEYLIKDUZU\", \"PERLAVISTA\": \"BEYKENT\", \"TORIUM\": \"HARAMIDERE\",\n  \"HAVALIMANI\": \"ISTANBUL HAVALIMANI\", \"SABIHA\": \"SABIHA GOKCEN\", \"OTOGAR\": \"ESENLER\"\n};\n\nfunction extractLocation(text) {\n  if (!text) return \"\";\n  let normalized = text.toString().toUpperCase()\n    .replace(/Ğ/g, \"G\").replace(/Ü/g, \"U\").replace(/Ş/g, \"S\")\n    .replace(/İ/g, \"I\").replace(/Ö/g, \"O\").replace(/Ç/g, \"C\")\n    .replace(/ISTANBUL/g, \"\").replace(/'DAN|'DEN|'YA|'YE/g, \"\").trim();\n  \n  for (const [key, val] of Object.entries(landmarks)) {\n    if (normalized.includes(key)) return val;\n  }\n  for (const district of knownDistricts) {\n    if (normalized.includes(district)) return district;\n  }\n  return normalized;\n}\n\nconst cleanPickup = extractLocation(pickup);\nconst cleanDropoff = extractLocation(dropoff);\n\nreturn [{\n  json: {\n    buyuk_arac: false,\n    toolCallId: toolCallId,\n    clean_pickup: cleanPickup,\n    clean_dropoff: cleanDropoff,\n    original_pickup: pickup,\n    original_dropoff: dropoff\n  }\n}];"
+      },
+      "id": "code-temizle",
+      "name": "Girdileri Temizle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [256, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.buyuk_arac }}",
+              "value2": "=true"
+            }
+          ]
+        }
+      },
+      "id": "if-buyuk-arac",
+      "name": "Büyük Araç mı?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [512, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json;\n// VAPI FORMATI\nreturn {\n  json: {\n    results: [\n      {\n        toolCallId: data.toolCallId || '',\n        result: data.result\n      }\n    ]\n  }\n};"
+      },
+      "id": "code-buyuk-arac-yanit",
+      "name": "Büyük Araç Yanıtı",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [752, -96]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "response-buyuk-arac",
+      "name": "Yanıt (Büyük Araç)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [992, -96]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ \n\"SELECT * FROM transfer_fiyatlari WHERE \" +\n\"(\" +\n\"  TRANSLATE(UPPER(kalkis_bolgesi), 'ŞİÜÖÇĞı', 'SIUOCGI') ILIKE '%\" + $json.clean_pickup + \"%\" + \"'\" +\n\"  OR \" +\n\"  '\" + $json.clean_pickup + \"' ILIKE '%' || TRANSLATE(UPPER(kalkis_bolgesi), 'ŞİÜÖÇĞı', 'SIUOCGI') || '%'\" +\n\")\" +\n\" AND \" +\n\"(\" +\n\"  TRANSLATE(UPPER(varis_yeri), 'ŞİÜÖÇĞı', 'SIUOCGI') ILIKE '%\" + $json.clean_dropoff + \"%\" + \"'\" +\n\"  OR \" +\n\"  '\" + $json.clean_dropoff + \"' ILIKE '%' || TRANSLATE(UPPER(varis_yeri), 'ŞİÜÖÇĞı', 'SIUOCGI') || '%'\" +\n\")\" +\n\" ORDER BY created_at DESC LIMIT 1;\" \n}}",
+        "additionalFields": {}
+      },
+      "id": "supabase-fiyat",
+      "name": "Supabase Fiyat Listesi",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [752, 112],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "LtVJaElJ076WoPhs",
+          "name": "Postgres account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.fiyat }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-fiyat-var",
+      "name": "Fiyat Listede Var mı?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1008, 112]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fiyat = $json.fiyat || \"Belirsiz\";\nconst temizVeri = $('Girdileri Temizle').item.json;\nconst toolCallId = temizVeri.toolCallId || '';\n\n// VAPI FORMATI\nreturn {\n  json: {\n    results: [\n      {\n        toolCallId: toolCallId,\n        result: `${temizVeri.original_pickup} - ${temizVeri.original_dropoff} arası için fiyatımız ${fiyat} TL'dir efendim.`\n      }\n    ]\n  }\n};"
+      },
+      "id": "code-liste-fiyat",
+      "name": "Liste Fiyatı Yanıtı",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1264, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "response-liste-fiyat",
+      "name": "Yanıt (Liste Fiyat)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1504, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://maps.googleapis.com/maps/api/directions/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "origin", "value": "={{ $('Girdileri Temizle').item.json.original_pickup }}, İstanbul, Turkey" },
+            { "name": "destination", "value": "={{ $('Girdileri Temizle').item.json.original_dropoff }}, İstanbul, Turkey" },
+            { "name": "key", "value": "AIzaSyDg-U9ttv3r12ra20tUREZ9GAqUGSyWzE4" },
+            { "name": "region", "value": "tr" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-google-maps",
+      "name": "Google Maps",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1264, 208]
+    },
+    {
+      "parameters": {
+        "jsCode": "const googleData = items[0].json;\nconst temizVeri = $('Girdileri Temizle').item.json;\nconst toolCallId = temizVeri.toolCallId || '';\n\nif (!googleData.routes || googleData.routes.length === 0) {\n  return {\n    json: {\n      results: [\n        {\n          toolCallId: toolCallId,\n          result: \"Maalesef bu konumları haritada tespit edemedim. Lütfen daha net bir adres söyler misiniz?\"\n        }\n      ]\n    }\n  };\n}\n\nconst route = googleData.routes[0].legs[0];\nconst mesafeKm = route.distance.value / 1000;\nconst sureDakika = Math.round(route.duration.value / 60);\nconst allStepsText = JSON.stringify(route.steps);\n\nlet ekUcret = 0;\nlet detayMesaji = \"\";\n\nif (allStepsText.includes(\"Avrasya Tüneli\") || allStepsText.includes(\"Eurasia Tunnel\")) {\n  ekUcret = 200;\n  detayMesaji = \"Avrasya Tüneli geçişi dahil\";\n} else if (allStepsText.includes(\"15 Temmuz\") || allStepsText.includes(\"Fatih Sultan Mehmet\") || \n           allStepsText.includes(\"Yavuz Sultan Selim\") || allStepsText.includes(\"Boğaziçi\")) {\n  ekUcret = 50;\n  detayMesaji = \"köprü geçiş ücreti dahil\";\n}\n\nlet toplamFiyat = (mesafeKm * 25) + ekUcret;\nif (toplamFiyat < 350) toplamFiyat = 350;\ntoplamFiyat = Math.ceil(toplamFiyat / 50) * 50;\n\nlet mesaj = `${temizVeri.original_pickup} - ${temizVeri.original_dropoff} arası yaklaşık ${mesafeKm.toFixed(0)} kilometre, ${sureDakika} dakikalık yol.`;\nif (detayMesaji) mesaj += ` ${detayMesaji},`;\nmesaj += ` Ücretimiz ${toplamFiyat} TL olacaktır efendim.`;\n\n// VAPI FORMATI\nreturn {\n  json: {\n    results: [\n      {\n        toolCallId: toolCallId,\n        result: mesaj\n      }\n    ]\n  }\n};"
+      },
+      "id": "code-google-hesapla",
+      "name": "Google Hesaplama",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1504, 208]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "response-google-fiyat",
+      "name": "Yanıt (Google Fiyat)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1744, 208]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Vapi Webhook": {
+      "main": [[{ "node": "Girdileri Temizle", "type": "main", "index": 0 }]]
+    },
+    "Girdileri Temizle": {
+      "main": [[{ "node": "Büyük Araç mı?", "type": "main", "index": 0 }]]
+    },
+    "Büyük Araç mı?": {
+      "main": [
+        [{ "node": "Büyük Araç Yanıtı", "type": "main", "index": 0 }],
+        [{ "node": "Supabase Fiyat Listesi", "type": "main", "index": 0 }]
+      ]
+    },
+    "Büyük Araç Yanıtı": {
+      "main": [[{ "node": "Yanıt (Büyük Araç)", "type": "main", "index": 0 }]]
+    },
+    "Supabase Fiyat Listesi": {
+      "main": [[{ "node": "Fiyat Listede Var mı?", "type": "main", "index": 0 }]]
+    },
+    "Fiyat Listede Var mı?": {
+      "main": [
+        [{ "node": "Liste Fiyatı Yanıtı", "type": "main", "index": 0 }],
+        [{ "node": "Google Maps", "type": "main", "index": 0 }]
+      ]
+    },
+    "Liste Fiyatı Yanıtı": {
+      "main": [[{ "node": "Yanıt (Liste Fiyat)", "type": "main", "index": 0 }]]
+    },
+    "Google Maps": {
+      "main": [[{ "node": "Google Hesaplama", "type": "main", "index": 0 }]]
+    },
+    "Google Hesaplama": {
+      "main": [[{ "node": "Yanıt (Google Fiyat)", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
