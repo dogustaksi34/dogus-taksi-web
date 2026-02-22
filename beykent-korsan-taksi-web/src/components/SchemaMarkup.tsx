@@ -11,7 +11,7 @@ export default function SchemaMarkup() {
             "Beylikdüzü ve Beykent korsan taksi hizmeti. Sabit fiyat, 7/24 ulaşım, konforlu araçlar.",
         url: SITE_CONFIG.url,
         telephone: "+905454572700",
-        foundingDate: `${SITE_CONFIG.foundedYear}`,
+        foundingDate: "2014",
         address: {
             "@type": "PostalAddress",
             streetAddress: "Beykent Mahallesi",
