@@ -72,7 +72,7 @@ export default function ContactPage() {
                                 </div>
                                 <div>
                                     <p className="text-sm text-[var(--color-text-muted)]">Adres</p>
-                                    <p className="text-base font-semibold text-[var(--color-text-primary)]">{SITE_CONFIG.address}</p>
+                                    <p className="text-base font-semibold text-[var(--color-text-primary)]">Beykent Mahallesi, Beylikdüzü, İstanbul</p>
                                 </div>
                             </div>
                         </div>
