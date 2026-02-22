@@ -1,6 +1,6 @@
 export const SITE_CONFIG = {
     name: "Doğuş Taksi",
-    url: "https://beykentkorsantaksi.shop", // Will update after domain selection
+    url: "https://beylikduzukorsantaksi.name.tr",
     description: "Doğuş Taksi: Beykent, Erdal, Mert, Limon ve Doruk Taksi'nin birleşiminden oluşan, bölgenin en büyük ve en güvenilir korsan taksi durağı. Sabit fiyat garantisiyle 7/24 hizmetinizde.",
     phone: "0545 457 27 00",
     phoneHref: "tel:+905454572700",
