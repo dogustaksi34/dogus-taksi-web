@@ -21,7 +21,7 @@ export default function Footer() {
                             </div>
                         </div>
                         <p className="text-sm text-[var(--color-text-secondary)] mb-4 leading-relaxed">
-                            {SITE_CONFIG.foundedYear} yılından bu yana Beylikdüzü ve çevresinde güvenilir,
+                            2014 yılından bu yana Beylikdüzü ve çevresinde güvenilir,
                             konforlu ve ekonomik taksi hizmeti sunuyoruz.
                         </p>
                         <div className="flex flex-col gap-2">
@@ -85,7 +85,7 @@ export default function Footer() {
                         <ul className="list-none flex flex-col gap-3 text-sm text-[var(--color-text-secondary)]">
                             <li className="flex items-start gap-2">
                                 <span>📍</span>
-                                <span>{SITE_CONFIG.address}</span>
+                                <span>Beykent Mahallesi, Beylikdüzü, İstanbul</span>
                             </li>
                             <li className="flex items-start gap-2">
                                 <span>📞</span>
@@ -114,7 +114,7 @@ export default function Footer() {
                 {/* Bottom */}
                 <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-[var(--color-text-muted)]">
                     <p>
-                        © {SITE_CONFIG.foundedYear}-{currentYear} {SITE_CONFIG.name}. Tüm hakları saklıdır.
+                        © 2014-{currentYear} {SITE_CONFIG.name}. Tüm hakları saklıdır.
                     </p>
                     <p>
                         Beylikdüzü Korsan Taksi | Beykent Korsan Taksi | Yakuplu Korsan Taksi
